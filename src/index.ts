@@ -1,4 +1,3 @@
-import { html, Html } from "@elysiajs/html";
 import { Elysia } from "elysia";
 import cors from "@elysiajs/cors";
 import bearer from "@elysiajs/bearer";
@@ -56,42 +55,9 @@ function broadcast(author: string, message: string, platformID: PlatformID = DEF
 // so HOPEFULLY there should be little to no "I'm on mobile data why are you eating up all my left up data!!" complaints.
 const HEARTBEAT_INTERVAL_MS = 25e3;
 
-// TODO: remove /test when I'm done testing (never)
-
 const app = new Elysia()
-  .use(html())
   .use(cors())
   .use(bearer())
-  .get("/test", () => {
-    return <html>
-      <head>
-        <title>Test Page</title>
-      </head>
-      <body>
-        <h1>Testing 123</h1>
-        <input type="text" placeholder="Author name" required></input>
-        <textarea id="message" placeholder="Enter your message"></textarea>
-        <button id="submit">Submit</button>
-        <script async defer>
-          {/* TODO: it's probably better to just have this as a static file */}
-          {/* JSX moment, I have to add a bunch of {'(character)'}s because they're special characters in JSX */}
-          const evtSource = new EventSource("/listen");
-          document.getElementById("submit").onclick = () ={'>'} {'{'}
-          const author = document.querySelector("input").value;
-          const message = document.getElementById("message").value;
-
-          fetch(`/send?author=${'{'}encodeURIComponent(author){'}'}`, {'{'}
-          method: "POST",
-          headers: {'{'}
-          "Content-Type": "text/plain"
-          {'}'},
-          body: message
-          {'}'});
-          {'}'};
-        </script>
-      </body>
-    </html>;
-  })
   .get("/listen", () => {
     let controllerRef: ReadableStreamDefaultController<string> | null = null;
     let heartbeatInterval: NodeJS.Timeout | undefined = undefined;

@@ -8,7 +8,6 @@
   "dependencies": {
     "@elysiajs/bearer": "^1.4.1",
     "@elysiajs/cors": "^1.4.0",
-    "@elysiajs/html": "^1.4.0",
     "elysia": "latest",
     "zod": "^4.1.13"
   },
