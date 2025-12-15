@@ -3,6 +3,7 @@ import cors from "@elysiajs/cors";
 import bearer from "@elysiajs/bearer";
 import z from "zod";
 
+
 const clients = new Set<ReadableStreamDefaultController<string>>();
 const DEFAULT_PLATFORM_ID = "imchat:default" as const satisfies PlatformID;
 const platformIDLiteral = z.templateLiteral([z.string(), ":", z.string()]).default(DEFAULT_PLATFORM_ID);
