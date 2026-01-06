@@ -6,7 +6,7 @@ export class BinMsg {
 
     static readInitial(buf: ArrayBuffer): BinMsg {
         const bp = BufParser.read(buf);
-        return new BinMsg(bp.readString(), this.readOptString(bp));
+        return new BinMsg(bp.readString(), this.readOptString(bp), this.readOptString(bp));
     }
 
     static writeOptString(bp: BufParser, author?: string) {
@@ -40,7 +40,7 @@ export class BinMsg {
     }
 
     private writeOptString(bp: BufParser, s?: string) {
-        bp.writeBoolean(!!s)
+        bp.writeBoolean(!!s);
         if (s) {
             bp.writeString(s);
         }
@@ -49,10 +49,12 @@ export class BinMsg {
     writeInitial(): ArrayBuffer {
         const bp = BufParser.write(
             BufParser.stringBytes(this.msg) +
-                BinMsg.optStringBytes(this.author),
+                BinMsg.optStringBytes(this.author) +
+                BinMsg.optStringBytes(this.platformID)
         );
         bp.writeString(this.msg);
         this.writeOptString(bp, this.author);
+        this.writeOptString(bp, this.platformID);
         return bp.toBuffer();
     }
     write(version: ProtocolVersion): ArrayBuffer {
@@ -70,9 +72,10 @@ export class BinMsg {
 function test(pv: ProtocolVersion) {
   const author = undefined;
   const message = "67";
+  const platformID = "impact:test";
 
-  console.log(`${author}: ${message}`);
-  const from = new BinMsg(message, author).write(pv);
+  console.log(`${author}: ${message} via ${platformID}`);
+  const from = new BinMsg(message, author, platformID).write(pv);
   console.info("Encoded: ", from);
   const to = BinMsg.read(pv, from);
   if (to.author !== author) {
@@ -80,6 +83,9 @@ function test(pv: ProtocolVersion) {
   }
   if (to.msg !== message) {
     console.warn(`Decoded message improperly: ${message} decodes to ${to.msg}`);
+  }
+  if (to.platformID !== platformID) {
+    console.warn(`Decoded platformID improperly: ${platformID} decodes to ${to.platformID}`);
   }
   console.info("Decoded successfully!");
 }
