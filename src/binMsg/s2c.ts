@@ -2,7 +2,7 @@ import BufParser from "../buf";
 import ProtocolVersion from "../protocol";
 
 export class BinMsg {
-    public constructor(public msg: string, public author?: string) {}
+    public constructor(public msg: string, public author?: string, public platformID?: string) {}
 
     static readInitial(buf: ArrayBuffer): BinMsg {
         const bp = BufParser.read(buf);

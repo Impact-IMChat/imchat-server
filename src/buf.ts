@@ -109,36 +109,37 @@ export default class BufParser {
 
 
   private writeVarIntFull(value: number): void {
+    const view = new DataView(this.buffer);
     if ((value & 0xFFFFFF80) === 0) {
       this.ensureCapacity(1);
-      new DataView(this.buffer).setUint8(this.writeIndex++, value);
+      view.setUint8(this.writeIndex++, value);
     } else if ((value & 0xFFFFC000) === 0) {
       this.ensureCapacity(2);
       const w = ((value & 0x7F) | 0x80) << 8 |
         (value >>> 7);
-      new DataView(this.buffer).setUint16(this.writeIndex, w, true); // Little-endian
+      view.setUint16(this.writeIndex, w, true); // Little-endian
       this.writeIndex += 2;
     } else if ((value & 0xFFE00000) === 0) {
       this.ensureCapacity(3);
       const w = ((value & 0x7F) | 0x80) << 16 |
         (((value >>> 7) & 0x7F) | 0x80) << 8 |
         (value >>> 14);
-      new DataView(this.buffer).setUint8(this.writeIndex++, w & 0xFF);
-      new DataView(this.buffer).setUint8(this.writeIndex++, (w >>> 8) & 0xFF);
-      new DataView(this.buffer).setUint8(this.writeIndex++, (w >>> 16) & 0xFF);
+      view.setUint8(this.writeIndex++, w & 0xFF);
+      view.setUint8(this.writeIndex++, (w >>> 8) & 0xFF);
+      view.setUint8(this.writeIndex++, (w >>> 16) & 0xFF);
     } else if ((value & 0xF0000000) === 0) {
       this.ensureCapacity(4);
-      new DataView(this.buffer).setUint8(this.writeIndex++, (value & 0x7F) | 0x80);
-      new DataView(this.buffer).setUint8(this.writeIndex++, ((value >>> 7) & 0x7F) | 0x80);
-      new DataView(this.buffer).setUint8(this.writeIndex++, ((value >>> 14) & 0x7F) | 0x80);
-      new DataView(this.buffer).setUint8(this.writeIndex++, value >>> 21);
+      view.setUint8(this.writeIndex++, (value & 0x7F) | 0x80);
+      view.setUint8(this.writeIndex++, ((value >>> 7) & 0x7F) | 0x80);
+      view.setUint8(this.writeIndex++, ((value >>> 14) & 0x7F) | 0x80);
+      view.setUint8(this.writeIndex++, value >>> 21);
     } else {
       this.ensureCapacity(5);
-      new DataView(this.buffer).setUint8(this.writeIndex++, (value & 0x7F) | 0x80);
-      new DataView(this.buffer).setUint8(this.writeIndex++, ((value >>> 7) & 0x7F) | 0x80);
-      new DataView(this.buffer).setUint8(this.writeIndex++, ((value >>> 14) & 0x7F) | 0x80);
-      new DataView(this.buffer).setUint8(this.writeIndex++, ((value >>> 21) & 0x7F) | 0x80);
-      new DataView(this.buffer).setUint8(this.writeIndex++, value >>> 28);
+      view.setUint8(this.writeIndex++, (value & 0x7F) | 0x80);
+      view.setUint8(this.writeIndex++, ((value >>> 7) & 0x7F) | 0x80);
+      view.setUint8(this.writeIndex++, ((value >>> 14) & 0x7F) | 0x80);
+      view.setUint8(this.writeIndex++, ((value >>> 21) & 0x7F) | 0x80);
+      view.setUint8(this.writeIndex++, value >>> 28);
     }
   }
 
