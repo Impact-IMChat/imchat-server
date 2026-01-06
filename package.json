@@ -3,16 +3,16 @@
   "version": "1.0.50",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "bun run --watch --no-keep-alive-timeout src/index.tsx"
+    "dev": "bun run --watch --no-keep-alive-timeout src/index.ts"
   },
   "dependencies": {
-    "@elysiajs/bearer": "^1.4.1",
-    "@elysiajs/cors": "^1.4.0",
+    "@elysiajs/bearer": "^1.4",
+    "@elysiajs/cors": "^1.4",
     "elysia": "latest",
-    "zod": "^4.1.13"
+    "zod": "^4.1"
   },
   "devDependencies": {
     "bun-types": "latest"
   },
-  "module": "src/index.jsx"
+  "module": "src/index.js"
 }

@@ -2,18 +2,25 @@ import { Elysia } from "elysia";
 import cors from "@elysiajs/cors";
 import bearer from "@elysiajs/bearer";
 import z from "zod";
-
+import BufParser from "./buf";
+import ProtocolVersion from "./protocol";
+import { BinMsg } from "./binMsg/s2c";
 
 const clients = new Set<ReadableStreamDefaultController<string>>();
 const DEFAULT_PLATFORM_ID = "imchat:default" as const satisfies PlatformID;
-const platformIDLiteral = z.templateLiteral([z.string(), ":", z.string()]).default(DEFAULT_PLATFORM_ID);
+const platformIDLiteral = z.templateLiteral([z.string(), ":", z.string()])
+  .default(DEFAULT_PLATFORM_ID);
 // (sorry, MCP is garbage. use a mod loader instead)
 /** Think of a `PlatformID` as an `Identifier` (yarn) or `ResourceLocation` (Minecraft C\*\*\*r Pack and M\*jmap). It's just 2 strings separated by a `:`. */
 type PlatformID = `${string}:${string}`;
 
-async function fetchAPIKeysFromFile(): Promise<Record<PlatformID, string> | undefined> {
+async function fetchAPIKeysFromFile(): Promise<
+  Record<PlatformID, string> | undefined
+> {
   try {
-    await Bun.file(new URL(import.meta.resolve("../protectedPlatformAPIKeys.json"))).json() as Record<PlatformID, string>
+    await Bun.file(
+      new URL(import.meta.resolve("../protectedPlatformAPIKeys.json")),
+    ).json() as Record<PlatformID, string>;
   } catch (e) {
     return undefined;
   }
@@ -34,11 +41,15 @@ async function fetchAPIKeys(): Promise<Record<PlatformID, string>> {
 const apiKeys = await fetchAPIKeys();
 const protectedPlatformIDs = Object.keys(apiKeys) as PlatformID[];
 
-function broadcast(author: string, message: string, platformID: PlatformID = DEFAULT_PLATFORM_ID) {
+function broadcast(
+  author: string,
+  message: string,
+  platformID: PlatformID = DEFAULT_PLATFORM_ID,
+) {
   // if (DISCORD_WEBHOOK_URL !== undefined)
   //   sendToDiscord(author, message);
   const payload = JSON.stringify({ author, message, platformID });
-  for (const c of Array.from(clients)) {
+  for (const c of clients) {
     try {
       c.enqueue(`data: ${payload}\n\n`);
     } catch (err) {
@@ -59,6 +70,27 @@ const HEARTBEAT_INTERVAL_MS = 25e3;
 const app = new Elysia()
   .use(cors())
   .use(bearer())
+  .ws("/v1/ws", {
+    perMessageDeflate: true,
+    message(ws, message) {
+    },
+    open(ws) {
+      const {protocolVersion, username, platformID} = ws.data.query;
+      if (protectedPlatformIDs.includes(platformID) && apiKeys[platformID] !== ws.data.bearer) {
+        ws.close(108, "Unauthorized");
+      }
+      console.info(`[IRC] ${username} connected via the WebSocket API`);
+      ws.sendBinary(new BinMsg("Connected!").write(protocolVersion), true);
+    },
+    body: z.string(),
+    response: z.any(), // TODO: how would you add typings to binary messages?
+    query: z.object({
+      platformID: platformIDLiteral,
+      username: z.string(), // why would you change your name mid-connection
+      // the client should NEVER be able to change protocol versions mid-connection.
+      protocolVersion: z.enum(ProtocolVersion),
+    }),
+  })
   .get("/listen", () => {
     let controllerRef: ReadableStreamDefaultController<string> | null = null;
     let heartbeatInterval: NodeJS.Timeout | undefined = undefined;
@@ -66,12 +98,14 @@ const app = new Elysia()
       start(controller) {
         controllerRef = controller;
         clients.add(controller);
-        controller.enqueue(`data: ${JSON.stringify({ author: null, message: "Connected" })}\n\n`);
+        controller.enqueue(
+          `data: ${JSON.stringify({ author: null, message: "Connected" })}\n\n`,
+        );
         heartbeatInterval = setInterval(() => {
           try {
             controller.enqueue(":\n\n");
           } catch (e) {
-            console.error(`Error sending keepalive to a controller: ${e}`)
+            console.error(`Error sending keepalive to a controller: ${e}`);
           }
         }, HEARTBEAT_INTERVAL_MS);
       },
@@ -83,24 +117,24 @@ const app = new Elysia()
         if (heartbeatInterval) {
           clearInterval(heartbeatInterval);
         }
-      }
+      },
     });
 
     return new Response(stream as unknown as ReadableStream, {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
-        Connection: "keep-alive"
-      }
+        Connection: "keep-alive",
+      },
     });
   }, {
     response: z.object({
       author: z.nullable(z.string()),
       message: z.string(),
-      platformID: platformIDLiteral.optional()
-    })
+      platformID: platformIDLiteral.optional(),
+    }),
   })
-  .post("/send-protected", a => {
+  .post("/send-protected", (a) => {
     const message = a.body;
     const { author, platformID } = a.query;
 
@@ -112,24 +146,27 @@ const app = new Elysia()
       if (!bearer || bearer !== apiKeys[query.platformID]) {
         set.headers[
           "WWW-Authenticate"
-        ] = `Bearer realm='/send-protected', error="invalid_request"`
+        ] = `Bearer realm='/send-protected', error="invalid_request"`;
 
-        return status(400, "Unauthorized")
+        return status(400, "Unauthorized");
       }
       console.info("passed auth");
     },
     body: z.string(),
     query: z.object({
       author: z.string(),
-      platformID: platformIDLiteral
+      platformID: platformIDLiteral,
     }),
   })
-  .post("/send", r => {
+  .post("/send", (r) => {
     const message = r.body;
     const { author, platformID = DEFAULT_PLATFORM_ID } = r.query;
 
     if (protectedPlatformIDs.includes(platformID)) {
-      return r.status("Unauthorized", `${platformID} is a protected platform ID, please authenticate in order to use it.`);
+      return r.status(
+        "Unauthorized",
+        `${platformID} is a protected platform ID, please authenticate in order to use it.`,
+      );
     }
 
     console.log(`[IRC] (NORMAL via ${platformID}) <${author}> ${message}`);
@@ -139,13 +176,11 @@ const app = new Elysia()
     body: z.string(),
     query: z.object({
       author: z.string(),
-      platformID: platformIDLiteral
+      platformID: platformIDLiteral,
     }),
   })
   .listen(3000);
 
-export default app;
-
 console.log(
-  `Running on ${app.server?.hostname}:${app.server?.port}`
+  `Running on ${app.server?.hostname}:${app.server?.port}`,
 );

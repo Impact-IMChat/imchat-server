@@ -1,6 +1,11 @@
 # IMChat (Impact Chat)
 
-## Send messages
+## Legacy
+
+This is marked as **legacy** because CloudFlare seems to have skill issues with SSE endpoints,
+so we're trying to use WebSockets now.
+
+### Send messages
 
 Send a POST request to /send with a query parameter named `author`, you can attach a query parameter named `platformID`,
 which can be anything separated by a `:` somewhere (`type PlatformID = ${string}:${string}`), like a Minecraft `Identifier` / `ResourceLocation`.
@@ -21,7 +26,7 @@ async function sendMessage(message: string, author: string, platformID?: Platfor
 }
 ```
 
-## Listen for messages
+### Listen for messages
 
 Listen to the SSE endpoint (/listen).
 You will get JSON data, which has a `message` field, an `author` (nullable), and a `platformID` field (optional) field:
