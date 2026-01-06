@@ -73,6 +73,9 @@ const app = new Elysia()
   .ws("/v1/ws", {
     perMessageDeflate: true,
     message(ws, message) {
+      const {username, platformID} = ws.data.query;
+
+      broadcast(username, message, platformID);
     },
     open(ws) {
       const {protocolVersion, username, platformID} = ws.data.query;
@@ -80,7 +83,7 @@ const app = new Elysia()
         ws.close(108, "Unauthorized");
       }
       console.info(`[IRC] ${username} connected via the WebSocket API`);
-      ws.sendBinary(new BinMsg("Connected!").write(protocolVersion), true);
+      ws.sendBinary(new BinMsg("Connected").write(protocolVersion), true);
     },
     body: z.string(),
     response: z.any(), // TODO: how would you add typings to binary messages?

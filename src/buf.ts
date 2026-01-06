@@ -1,5 +1,3 @@
-import ProtocolVersion from "./protocol";
-
 export default class BufParser {
   constructor(public buffer: ArrayBuffer) { }
 
