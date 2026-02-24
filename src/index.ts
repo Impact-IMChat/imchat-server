@@ -1,61 +1,72 @@
-import { Elysia } from "elysia";
-import cors from "@elysiajs/cors";
 import bearer from "@elysiajs/bearer";
+import cors from "@elysiajs/cors";
+import { Elysia } from "elysia";
 import z from "zod";
-import BufParser from "./buf";
-import ProtocolVersion from "./protocol";
 import { BinMsg } from "./binMsg/s2c";
+import ProtocolVersion from "./protocol";
 
-const clients = new Set<ReadableStreamDefaultController<string>>();
+const sseClients = new Set<ReadableStreamDefaultController<string>>();
 const DEFAULT_PLATFORM_ID = "imchat:default" as const satisfies PlatformID;
-const platformIDLiteral = z.templateLiteral([z.string(), ":", z.string()])
-  .default(DEFAULT_PLATFORM_ID);
+const platformIDLiteral = z
+	.templateLiteral([z.string(), ":", z.string()])
+	.default(DEFAULT_PLATFORM_ID);
 // (sorry, MCP is garbage. use a mod loader instead)
 /** Think of a `PlatformID` as an `Identifier` (yarn) or `ResourceLocation` (Minecraft C\*\*\*r Pack and M\*jmap). It's just 2 strings separated by a `:`. */
 type PlatformID = `${string}:${string}`;
 
 async function fetchAPIKeysFromFile(): Promise<
-  Record<PlatformID, string> | undefined
+	Record<PlatformID, string> | undefined
 > {
-  try {
-    await Bun.file(
-      new URL(import.meta.resolve("../protectedPlatformAPIKeys.json")),
-    ).json() as Record<PlatformID, string>;
-  } catch (e) {
-    return undefined;
-  }
+	try {
+		(await Bun.file(
+			new URL(import.meta.resolve("../protectedPlatformAPIKeys.json")),
+		).json()) as Record<PlatformID, string>;
+	} catch (_err) {
+		return undefined;
+	}
 }
 
 async function fetchAPIKeys(): Promise<Record<PlatformID, string>> {
-  try {
-    const file = await fetchAPIKeysFromFile();
-    if (file !== undefined) return file;
-    const env = Bun.env.PROTECTED_PLATFORM_API_KEYS_JSON;
-    if (env !== undefined) return JSON.parse(env);
-    else return {};
-  } catch (e) {
-    return {};
-  }
+	try {
+		const file = await fetchAPIKeysFromFile();
+		if (file !== undefined) return file;
+		const env = Bun.env.PROTECTED_PLATFORM_API_KEYS_JSON;
+		if (env !== undefined) return JSON.parse(env);
+		else return {};
+	} catch (_err) {
+		return {};
+	}
 }
 
 const apiKeys = await fetchAPIKeys();
 const protectedPlatformIDs = Object.keys(apiKeys) as PlatformID[];
+type WSListener = {
+	version: ProtocolVersion;
+	write: (buf: BufferSource) => void;
+};
+const wsClients: WSListener[] = [];
 
 function broadcast(
-  author: string,
-  message: string,
-  platformID: PlatformID = DEFAULT_PLATFORM_ID,
+	author: string,
+	message: string,
+	platformID: PlatformID = DEFAULT_PLATFORM_ID,
 ) {
-  // if (DISCORD_WEBHOOK_URL !== undefined)
-  //   sendToDiscord(author, message);
-  const payload = JSON.stringify({ author, message, platformID });
-  for (const c of clients) {
-    try {
-      c.enqueue(`data: ${payload}\n\n`);
-    } catch (err) {
-      clients.delete(c);
-    }
-  }
+	// if (DISCORD_WEBHOOK_URL !== undefined)
+	//   sendToDiscord(author, message);
+	if (sseClients.size > 0) {
+		const payload = JSON.stringify({ author, message, platformID });
+		for (const c of sseClients) {
+			try {
+				c.enqueue(`data: ${payload}\n\n`);
+			} catch (_err) {
+				sseClients.delete(c);
+			}
+		}
+	}
+	for (const c of wsClients) {
+		const bm = new BinMsg(author, message, platformID);
+		c.write(bm.write(c.version));
+	}
 }
 
 // Cloudflare Workers / Vercel Edge have limits of ≈30 s
@@ -68,122 +79,136 @@ function broadcast(
 const HEARTBEAT_INTERVAL_MS = 25e3;
 
 const app = new Elysia()
-  .use(cors())
-  .use(bearer())
-  .ws("/v1/ws", {
-    perMessageDeflate: true,
-    message(ws, message) {
-      const {username, platformID} = ws.data.query;
+	.use(cors())
+	.use(bearer())
+	.ws("/v1/ws", {
+		perMessageDeflate: true,
+		message(ws, message) {
+			const { username, platformID } = ws.data.query;
 
-      broadcast(username, message, platformID);
-    },
-    open(ws) {
-      const {protocolVersion, username, platformID} = ws.data.query;
-      if (protectedPlatformIDs.includes(platformID) && apiKeys[platformID] !== ws.data.bearer) {
-        ws.close(108, "Unauthorized");
-      }
-      console.info(`[IRC] ${username} connected via the WebSocket API`);
-      ws.sendBinary(new BinMsg("Connected").write(protocolVersion), true);
-    },
-    body: z.string(),
-    response: z.any(), // TODO: how would you add typings to binary messages?
-    query: z.object({
-      platformID: platformIDLiteral,
-      username: z.string(), // why would you change your name mid-connection
-      // the client should NEVER be able to change protocol versions mid-connection.
-      protocolVersion: z.enum(ProtocolVersion),
-    }),
-  })
-  .get("/listen", () => {
-    let controllerRef: ReadableStreamDefaultController<string> | null = null;
-    let heartbeatInterval: NodeJS.Timeout | undefined = undefined;
-    const stream = new ReadableStream<string>({
-      start(controller) {
-        controllerRef = controller;
-        clients.add(controller);
-        controller.enqueue(
-          `data: ${JSON.stringify({ author: null, message: "Connected" })}\n\n`,
-        );
-        heartbeatInterval = setInterval(() => {
-          try {
-            controller.enqueue(":\n\n");
-          } catch (e) {
-            console.error(`Error sending keepalive to a controller: ${e}`);
-          }
-        }, HEARTBEAT_INTERVAL_MS);
-      },
-      cancel() {
-        if (controllerRef) {
-          clients.delete(controllerRef);
-          controllerRef = null;
-        }
-        if (heartbeatInterval) {
-          clearInterval(heartbeatInterval);
-        }
-      },
-    });
+			broadcast(username, message, platformID);
+		},
+		open(ws) {
+			const { protocolVersion, username, platformID } = ws.data.query;
+			if (
+				protectedPlatformIDs.includes(platformID) &&
+				apiKeys[platformID] !== ws.data.bearer
+			) {
+				ws.close(108, "Unauthorized");
+			}
+			console.info(`[IRC] ${username} connected via the WebSocket API`);
+			ws.sendBinary(new BinMsg("Connected").write(protocolVersion), true);
+		},
+		body: z.string(),
+		response: z.any(), // TODO: how would you add typings to binary messages?
+		query: z.object({
+			platformID: platformIDLiteral,
+			username: z.string(), // why would you change your name mid-connection
+			// the client should NEVER be able to change protocol versions mid-connection.
+			protocolVersion: z.enum(ProtocolVersion),
+		}),
+	})
+	.get(
+		"/listen",
+		() => {
+			let controllerRef: ReadableStreamDefaultController<string> | null = null;
+			let heartbeatInterval: NodeJS.Timeout | undefined;
+			const stream = new ReadableStream<string>({
+				start(controller) {
+					controllerRef = controller;
+					sseClients.add(controller);
+					controller.enqueue(
+						`data: ${JSON.stringify({ author: null, message: "Connected" })}\n\n`,
+					);
+					heartbeatInterval = setInterval(() => {
+						try {
+							controller.enqueue(":\n\n");
+						} catch (e) {
+							console.error(`Error sending keepalive to a controller: ${e}`);
+						}
+					}, HEARTBEAT_INTERVAL_MS);
+				},
+				cancel() {
+					if (controllerRef) {
+						sseClients.delete(controllerRef);
+						controllerRef = null;
+					}
+					if (heartbeatInterval) {
+						clearInterval(heartbeatInterval);
+					}
+				},
+			});
 
-    return new Response(stream as unknown as ReadableStream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      },
-    });
-  }, {
-    response: z.object({
-      author: z.nullable(z.string()),
-      message: z.string(),
-      platformID: platformIDLiteral.optional(),
-    }),
-  })
-  .post("/send-protected", (a) => {
-    const message = a.body;
-    const { author, platformID } = a.query;
+			return new Response(stream as unknown as ReadableStream, {
+				headers: {
+					"Content-Type": "text/event-stream",
+					"Cache-Control": "no-cache",
+					Connection: "keep-alive",
+				},
+			});
+		},
+		{
+			response: z.object({
+				author: z.nullable(z.string()),
+				message: z.string(),
+				platformID: platformIDLiteral.optional(),
+			}),
+		},
+	)
+	.post(
+		"/send-protected",
+		(a) => {
+			const message = a.body;
+			const { author, platformID } = a.query;
 
-    console.log(`[IRC] (AUTHORIZED via ${platformID}) <${author}> ${message}`);
+			console.log(
+				`[IRC] (AUTHORIZED via ${platformID}) <${author}> ${message}`,
+			);
 
-    broadcast(author, message, platformID);
-  }, {
-    beforeHandle({ bearer, set, status, query }) {
-      if (!bearer || bearer !== apiKeys[query.platformID]) {
-        set.headers[
-          "WWW-Authenticate"
-        ] = `Bearer realm='/send-protected', error="invalid_request"`;
+			broadcast(author, message, platformID);
+		},
+		{
+			beforeHandle({ bearer, set, status, query }) {
+				if (!bearer || bearer !== apiKeys[query.platformID]) {
+					set.headers["WWW-Authenticate"] =
+						`Bearer realm='/send-protected', error="invalid_request"`;
 
-        return status(400, "Unauthorized");
-      }
-      console.info("passed auth");
-    },
-    body: z.string(),
-    query: z.object({
-      author: z.string(),
-      platformID: platformIDLiteral,
-    }),
-  })
-  .post("/send", (r) => {
-    const message = r.body;
-    const { author, platformID = DEFAULT_PLATFORM_ID } = r.query;
+					return status(400, "Unauthorized");
+				}
+				console.info("passed auth");
+			},
+			body: z.string(),
+			query: z.object({
+				author: z.string(),
+				platformID: platformIDLiteral,
+			}),
+		},
+	)
+	.post(
+		"/send",
+		(r) => {
+			const message = r.body;
+			const { author, platformID = DEFAULT_PLATFORM_ID } = r.query;
 
-    if (protectedPlatformIDs.includes(platformID)) {
-      return r.status(
-        "Unauthorized",
-        `${platformID} is a protected platform ID, please authenticate in order to use it.`,
-      );
-    }
+			if (protectedPlatformIDs.includes(platformID)) {
+				return r.status(
+					"Unauthorized",
+					`${platformID} is a protected platform ID, please authenticate in order to use it.`,
+				);
+			}
 
-    console.log(`[IRC] (NORMAL via ${platformID}) <${author}> ${message}`);
+			console.log(`[IRC] (NORMAL via ${platformID}) <${author}> ${message}`);
 
-    broadcast(author, message, platformID);
-  }, {
-    body: z.string(),
-    query: z.object({
-      author: z.string(),
-      platformID: platformIDLiteral,
-    }),
-  })
-  .listen(3000);
+			broadcast(author, message, platformID);
+		},
+		{
+			body: z.string(),
+			query: z.object({
+				author: z.string(),
+				platformID: platformIDLiteral,
+			}),
+		},
+	)
+	.listen(3000);
 
-console.log(
-  `Running on ${app.server?.hostname}:${app.server?.port}`,
-);
+console.log(`Running on ${app.server?.hostname}:${app.server?.port}`);
