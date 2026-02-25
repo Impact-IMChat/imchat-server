@@ -105,26 +105,41 @@ const app = new Elysia()
 			platformID: platformIDLiteral,
 			username: z.string(), // why would you change your name mid-connection
 			// the client should NEVER be able to change protocol versions mid-connection.
-			protocolVersion: z.enum(ProtocolVersion),
+			protocolVersion: z.preprocess((v) => {
+				if (typeof v === "string") {
+					const n = Number.parseInt(v, 10);
+					if (Number.isNaN(n)) return ProtocolVersion.INITIAL;
+					return n;
+				};
+				return v;
+			}, z.enum(ProtocolVersion)),
 		}),
 	})
 	.get(
 		"/listen",
 		() => {
-			let controllerRef: ReadableStreamDefaultController<string> | null = null;
+			let controllerRef: ReadableStreamDefaultController<string> | null =
+				null;
 			let heartbeatInterval: NodeJS.Timeout | undefined;
 			const stream = new ReadableStream<string>({
 				start(controller) {
 					controllerRef = controller;
 					sseClients.add(controller);
 					controller.enqueue(
-						`data: ${JSON.stringify({ author: null, message: "Connected" })}\n\n`,
+						`data: ${
+							JSON.stringify({
+								author: null,
+								message: "Connected",
+							})
+						}\n\n`,
 					);
 					heartbeatInterval = setInterval(() => {
 						try {
 							controller.enqueue(":\n\n");
 						} catch (e) {
-							console.error(`Error sending keepalive to a controller: ${e}`);
+							console.error(
+								`Error sending keepalive to a controller: ${e}`,
+							);
 						}
 					}, HEARTBEAT_INTERVAL_MS);
 				},
@@ -197,7 +212,9 @@ const app = new Elysia()
 				);
 			}
 
-			console.log(`[IRC] (NORMAL via ${platformID}) <${author}> ${message}`);
+			console.log(
+				`[IRC] (NORMAL via ${platformID}) <${author}> ${message}`,
+			);
 
 			broadcast(author, message, platformID);
 		},
