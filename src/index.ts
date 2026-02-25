@@ -107,8 +107,7 @@ const app = new Elysia()
 			// the client should NEVER be able to change protocol versions mid-connection.
 			protocolVersion: z.preprocess((v) => {
 				if (typeof v === "string") {
-					return tryParseProtocolVersion(v) ??
-						ProtocolVersion.INITIAL;
+					return tryParseProtocolVersion(v) ?? ProtocolVersion.INITIAL;
 				}
 				return v;
 			}, z.enum(ProtocolVersion)),
@@ -117,28 +116,23 @@ const app = new Elysia()
 	.get(
 		"/listen",
 		() => {
-			let controllerRef: ReadableStreamDefaultController<string> | null =
-				null;
+			let controllerRef: ReadableStreamDefaultController<string> | null = null;
 			let heartbeatInterval: NodeJS.Timeout | undefined;
 			const stream = new ReadableStream<string>({
 				start(controller) {
 					controllerRef = controller;
 					sseClients.add(controller);
 					controller.enqueue(
-						`data: ${
-							JSON.stringify({
-								author: null,
-								message: "Connected",
-							})
-						}\n\n`,
+						`data: ${JSON.stringify({
+							author: null,
+							message: "Connected",
+						})}\n\n`,
 					);
 					heartbeatInterval = setInterval(() => {
 						try {
 							controller.enqueue(":\n\n");
 						} catch (e) {
-							console.error(
-								`Error sending keepalive to a controller: ${e}`,
-							);
+							console.error(`Error sending keepalive to a controller: ${e}`);
 						}
 					}, HEARTBEAT_INTERVAL_MS);
 				},
@@ -211,9 +205,7 @@ const app = new Elysia()
 				);
 			}
 
-			console.log(
-				`[IRC] (NORMAL via ${platformID}) <${author}> ${message}`,
-			);
+			console.log(`[IRC] (NORMAL via ${platformID}) <${author}> ${message}`);
 
 			broadcast(author, message, platformID);
 		},
