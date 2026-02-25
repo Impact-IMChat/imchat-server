@@ -72,29 +72,29 @@ export class BinMsg {
 	}
 }
 
-function test(pv: ProtocolVersion) {
-	const author = undefined;
-	const message = "67";
-	const platformID = "impact:test";
+// function test(pv: ProtocolVersion) {
+// 	const author = undefined;
+// 	const message = "67";
+// 	const platformID = "impact:test";
 
-	console.log(`${author}: ${message} via ${platformID}`);
-	const from = new BinMsg(message, author, platformID).write(pv);
-	console.info("Encoded: ", from);
-	const to = BinMsg.read(pv, from);
-	if (to.author !== author) {
-		console.warn(
-			`Decoded author improperly: ${author} decodes to ${to.author}`,
-		);
-	}
-	if (to.msg !== message) {
-		console.warn(`Decoded message improperly: ${message} decodes to ${to.msg}`);
-	}
-	if (to.platformID !== platformID) {
-		console.warn(
-			`Decoded platformID improperly: ${platformID} decodes to ${to.platformID}`,
-		);
-	}
-	console.info("Decoded successfully!");
-}
+// 	console.log(`${author}: ${message} via ${platformID}`);
+// 	const from = new BinMsg(message, author, platformID).write(pv);
+// 	console.info("Encoded: ", from);
+// 	const to = BinMsg.read(pv, from);
+// 	if (to.author !== author) {
+// 		console.warn(
+// 			`Decoded author improperly: ${author} decodes to ${to.author}`,
+// 		);
+// 	}
+// 	if (to.msg !== message) {
+// 		console.warn(`Decoded message improperly: ${message} decodes to ${to.msg}`);
+// 	}
+// 	if (to.platformID !== platformID) {
+// 		console.warn(
+// 			`Decoded platformID improperly: ${platformID} decodes to ${to.platformID}`,
+// 		);
+// 	}
+// 	console.info("Decoded successfully!");
+// }
 
-test(ProtocolVersion.INITIAL);
+// test(ProtocolVersion.INITIAL);
