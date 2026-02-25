@@ -3,7 +3,7 @@ import cors from "@elysiajs/cors";
 import { Elysia } from "elysia";
 import z from "zod";
 import { BinMsg } from "./binMsg/s2c";
-import ProtocolVersion from "./protocol";
+import ProtocolVersion, { tryParseProtocolVersion } from "./protocol";
 
 const sseClients = new Set<ReadableStreamDefaultController<string>>();
 const DEFAULT_PLATFORM_ID = "imchat:default" as const satisfies PlatformID;
@@ -107,10 +107,9 @@ const app = new Elysia()
 			// the client should NEVER be able to change protocol versions mid-connection.
 			protocolVersion: z.preprocess((v) => {
 				if (typeof v === "string") {
-					const n = Number.parseInt(v, 10);
-					if (Number.isNaN(n)) return ProtocolVersion.INITIAL;
-					return n;
-				};
+					return tryParseProtocolVersion(v) ??
+						ProtocolVersion.INITIAL;
+				}
 				return v;
 			}, z.enum(ProtocolVersion)),
 		}),
